@@ -39,17 +39,54 @@ module Snakommit
       stdout.split("\n")
     end
 
-    # Stage the specified files
+    # Stage the specified files - using direct command for better reliability
     def add(files)
-      @repo.add(files)
+      return true if files.empty?
+      
+      # Make sure files is an array
+      files_to_add = files.is_a?(Array) ? files : [files]
+      
+      # Debug output
+      puts "Staging #{files_to_add.length} file(s):"
+      files_to_add.each { |f| puts "  Adding: #{f}" }
+      
+      stdout, stderr, status = Open3.capture3('git', 'add', *files_to_add)
+      raise GitError, "Failed to add files: #{stderr}" unless status.success?
+      
+      # Verify the files were added
+      newly_staged = staged_files
+      puts "Successfully staged #{newly_staged.length} file(s)"
       true
     rescue => e
       raise GitError, "Failed to add files: #{e.message}"
     end
 
+    # Unstage the specified files
+    def reset(files)
+      return true if files.empty?
+      
+      files_to_reset = files.is_a?(Array) ? files : [files]
+      
+      stdout, stderr, status = Open3.capture3('git', 'reset', 'HEAD', *files_to_reset)
+      raise GitError, "Failed to unstage files: #{stderr}" unless status.success?
+      
+      true
+    rescue => e
+      raise GitError, "Failed to unstage files: #{e.message}"
+    end
+
     # Commit with the given message
     def commit(message)
-      @repo.commit(message)
+      # Create temporary file for commit message to avoid shell escaping issues
+      message_file = File.join(@path, '.git', 'COMMIT_EDITMSG')
+      File.write(message_file, message)
+      
+      stdout, stderr, status = Open3.capture3('git', 'commit', '-F', message_file)
+      
+      # Clean up temp file
+      File.unlink(message_file) if File.exist?(message_file)
+      
+      raise GitError, "Failed to commit: #{stderr}" unless status.success?
       true
     rescue => e
       raise GitError, "Failed to commit: #{e.message}"
