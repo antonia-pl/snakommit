@@ -6,9 +6,13 @@ require 'tty-spinner'
 module Snakommit
   # Handles interactive prompts
   class Prompt
+    class PromptError < StandardError; end
+    
     def initialize
       @prompt = TTY::Prompt.new
       @config = Config.load
+    rescue => e
+      raise PromptError, "Failed to initialize prompt: #{e.message}"
     end
 
     # Main interactive commit flow
@@ -36,6 +40,10 @@ module Snakommit
       git.commit(message)
       
       { success: true, message: message }
+    rescue Git::GitError => e
+      { error: "Git error: #{e.message}" }
+    rescue => e
+      { error: "Error during commit flow: #{e.message}" }
     end
 
     private
@@ -59,6 +67,8 @@ module Snakommit
         git.add(selected)
         spinner.success("Files added")
       end
+    rescue => e
+      raise PromptError, "Failed to select files: #{e.message}"
     end
 
     # Get commit information
@@ -108,6 +118,8 @@ module Snakommit
       info
     rescue Interrupt
       { error: 'Commit aborted' }
+    rescue => e
+      { error: "Failed to gather commit information: #{e.message}" }
     end
 
     # Format the commit message according to convention
@@ -136,6 +148,8 @@ module Snakommit
       end
       
       header + body
+    rescue => e
+      raise PromptError, "Failed to format commit message: #{e.message}"
     end
   end
 end 

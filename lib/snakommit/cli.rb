@@ -5,6 +5,8 @@ module Snakommit
   class CLI
     def initialize
       @prompt = Prompt.new
+    rescue => e
+      handle_initialization_error(e)
     end
 
     def run(args)
@@ -22,6 +24,8 @@ module Snakommit
         show_help
         exit 1
       end
+    rescue => e
+      handle_runtime_error(e)
     end
 
     private
@@ -53,6 +57,39 @@ module Snakommit
           snakommit                 Run the interactive commit workflow
           snakommit help            Show this help message
       HELP
+    end
+
+    def handle_initialization_error(error)
+      case error
+      when Config::ConfigError
+        puts "Configuration error: #{error.message}"
+        puts "You may need to check permissions for ~/.snakommit.yml or create it manually."
+      when Git::GitError
+        puts "Git error: #{error.message}"
+        puts "Make sure you're in a Git repository and have Git installed."
+      when Prompt::PromptError
+        puts "Prompt error: #{error.message}"
+        puts "Make sure your terminal supports interactive prompts."
+      else
+        puts "Error initializing snakommit: #{error.message}"
+        puts error.backtrace.join("\n") if ENV['SNAKOMMIT_DEBUG']
+      end
+      exit 1
+    end
+
+    def handle_runtime_error(error)
+      case error
+      when Git::GitError
+        puts "Git error: #{error.message}"
+        puts "Make sure you have the necessary Git permissions."
+      when Prompt::PromptError
+        puts "Prompt error: #{error.message}"
+        puts "There was an issue with the interactive prompts."
+      else
+        puts "Error running snakommit: #{error.message}"
+        puts error.backtrace.join("\n") if ENV['SNAKOMMIT_DEBUG']
+      end
+      exit 1
     end
   end
 end 

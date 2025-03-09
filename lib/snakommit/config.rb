@@ -6,6 +6,8 @@ require 'fileutils'
 module Snakommit
   # Handles configuration for snakommit
   class Config
+    class ConfigError < StandardError; end
+    
     CONFIG_FILE = File.join(Dir.home, '.snakommit.yml')
     DEFAULT_CONFIG = {
       'types' => [
@@ -28,11 +30,19 @@ module Snakommit
     def self.load
       create_default_config unless File.exist?(CONFIG_FILE)
       YAML.load_file(CONFIG_FILE)
+    rescue Errno::EACCES, Errno::ENOENT => e
+      raise ConfigError, "Could not load configuration: #{e.message}"
+    rescue => e
+      raise ConfigError, "Unexpected error loading configuration: #{e.message}"
     end
 
     def self.create_default_config
       FileUtils.mkdir_p(File.dirname(CONFIG_FILE))
       File.write(CONFIG_FILE, DEFAULT_CONFIG.to_yaml)
+    rescue Errno::EACCES => e
+      raise ConfigError, "Permission denied creating config file: #{e.message}"
+    rescue => e
+      raise ConfigError, "Unexpected error creating config file: #{e.message}"
     end
   end
 end 

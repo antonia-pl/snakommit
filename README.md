@@ -20,6 +20,10 @@ Snakommit is a high-performance, interactive commit manager tool similar to Comm
 
 ### Install from source
 
+You have multiple options to install Snakommit:
+
+#### Option 1: Install to /usr/local/bin (requires sudo)
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/snakommit.git
@@ -29,7 +33,41 @@ cd snakommit
 bundle install
 
 # Create a symlink to use the tool globally
-ln -s "$(pwd)/bin/snakommit" /usr/local/bin/snakommit
+sudo ln -s "$(pwd)/bin/snakommit" /usr/local/bin/snakommit
+```
+
+#### Option 2: Install to your home directory (no sudo required)
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/snakommit.git
+cd snakommit
+
+# Install dependencies
+bundle install
+
+# Create a bin directory in your home folder (if it doesn't exist)
+mkdir -p ~/bin
+
+# Create a symlink in your home bin directory
+ln -s "$(pwd)/bin/snakommit" ~/bin/snakommit
+
+# Add this line to your ~/.zshrc or ~/.bash_profile and restart your terminal
+# export PATH="$HOME/bin:$PATH"
+```
+
+#### Option 3: Run directly from the repository
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/snakommit.git
+cd snakommit
+
+# Install dependencies
+bundle install
+
+# Run snakommit directly
+ruby -Ilib bin/snakommit
 ```
 
 ### Install via Homebrew (Coming soon)
@@ -81,6 +119,27 @@ scopes:
 max_subject_length: 100
 max_body_line_length: 72
 ```
+
+## Troubleshooting
+
+### Command not found after installation
+
+If you encounter a "command not found" error after installation:
+
+1. Make sure the symlink was created successfully
+2. If you installed to ~/bin, ensure your PATH includes this directory
+3. Try running with the full path to the executable
+
+### Permission issues
+
+If you encounter permission issues during installation:
+
+1. Try the alternative installation methods that don't require sudo
+2. Ensure your Ruby environment has the correct permissions
+3. Check that the executable bit is set on the bin/snakommit file:
+   ```bash
+   chmod +x bin/snakommit
+   ```
 
 ## License
 
