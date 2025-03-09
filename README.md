@@ -73,7 +73,7 @@ ruby -Ilib bin/snakommit
 ### Install via Homebrew (Coming soon)
 
 ```bash
-brew install yourusername/tap/snakommit
+/!\ - (coming soon)
 ```
 
 ## Usage
