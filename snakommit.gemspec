@@ -3,12 +3,12 @@ require_relative 'lib/snakommit/version'
 Gem::Specification.new do |spec|
   spec.name          = "snakommit"
   spec.version       = Snakommit::VERSION
-  spec.authors       = ["Your Name"]
-  spec.email         = ["your.email@example.com"]
+  spec.authors       = ["Antonia PL"]
+  spec.email         = ["antonia.dev@icloud.com"]
 
   spec.summary       = "A high-performance, interactive commit manager tool similar to Commitizen"
   spec.description   = "Snakommit helps teams maintain consistent commit message formats by guiding developers through the process of creating standardized commit messages"
-  spec.homepage      = "https://github.com/yourusername/snakommit"
+  spec.homepage      = "https://github.com/antonia-pl/snakommit"
   spec.license       = "MIT"
   spec.required_ruby_version = Gem::Requirement.new(">= 2.5.0")
 

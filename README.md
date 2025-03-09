@@ -40,7 +40,7 @@ sudo ln -s "$(pwd)/bin/snakommit" /usr/local/bin/snakommit
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/snakommit.git
+git clone git@github.com:antonia-pl/snakommit.git
 cd snakommit
 
 # Install dependencies
@@ -60,7 +60,7 @@ ln -s "$(pwd)/bin/snakommit" ~/bin/snakommit
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/snakommit.git
+git clone git@github.com:antonia-pl/snakommit.git
 cd snakommit
 
 # Install dependencies
