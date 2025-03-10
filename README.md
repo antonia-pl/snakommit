@@ -26,7 +26,7 @@ You have multiple options to install Snakommit:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/snakommit.git
+git clone git@github.com:antonia-pl/snakommit.git
 cd snakommit
 
 # Install dependencies
