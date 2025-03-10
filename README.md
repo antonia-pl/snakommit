@@ -73,7 +73,7 @@ ruby -Ilib bin/snakommit
 ### Install via Homebrew (Coming soon)
 
 ```bash
-/!\ - (coming soon)
+/!\ - (coming soon) - TODO
 ```
 
 ## Usage
