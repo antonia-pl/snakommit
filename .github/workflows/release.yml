@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Type of version bump'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: ['2.7', '3.0', '3.1', '3.2']
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Ruby ${{ matrix.ruby-version }}
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: ${{ matrix.ruby-version }}
+        bundler-cache: true
+    
+    - name: Install dependencies
+      run: bundle install
+    
+    - name: Run tests
+      run: bundle exec rake test
+
+  release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.0'
+        bundler-cache: true
+    
+    - name: Install dependencies
+      run: bundle install
+    
+    - name: Check if tag exists
+      id: check_tag
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          echo "tag_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "tag_exists=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Bump version
+      if: steps.check_tag.outputs.tag_exists == 'false'
+      id: bump_version
+      run: |
+        # Get current version from version.rb
+        CURRENT_VERSION=$(ruby -r ./lib/snakommit/version.rb -e "puts Snakommit::VERSION")
+        
+        # Parse version parts
+        MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+        MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+        PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+        
+        # Bump according to choice
+        if [ "${{ github.event.inputs.version_bump }}" == "major" ]; then
+          MAJOR=$((MAJOR + 1))
+          MINOR=0
+          PATCH=0
+        elif [ "${{ github.event.inputs.version_bump }}" == "minor" ]; then
+          MINOR=$((MINOR + 1))
+          PATCH=0
+        else
+          PATCH=$((PATCH + 1))
+        fi
+        
+        NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        
+        # Update version.rb
+        sed -i "s/VERSION = '$CURRENT_VERSION'/VERSION = '$NEW_VERSION'/" lib/snakommit/version.rb
+        
+        # Update CHANGELOG.md - add today's date to the unreleased section
+        TODAY=$(date +%Y-%m-%d)
+        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW_VERSION] - $TODAY/" CHANGELOG.md
+    
+    - name: Commit and tag version bump
+      if: steps.check_tag.outputs.tag_exists == 'false'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add lib/snakommit/version.rb CHANGELOG.md
+        git commit -m "Bump version to ${{ steps.bump_version.outputs.new_version }}"
+        git tag -a v${{ steps.bump_version.outputs.new_version }} -m "Version ${{ steps.bump_version.outputs.new_version }}"
+        git push origin main --tags
+    
+    - name: Get version for tag
+      if: steps.check_tag.outputs.tag_exists == 'true'
+      id: get_tag_version
+      run: |
+        echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Set release version
+      id: set_version
+      run: |
+        if [ "${{ steps.check_tag.outputs.tag_exists }}" == "true" ]; then
+          echo "version=${{ steps.get_tag_version.outputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ steps.bump_version.outputs.new_version }}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Build gem
+      run: gem build snakommit.gemspec
+    
+    - name: Publish to RubyGems
+      env:
+        RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+      run: |
+        mkdir -p ~/.gem
+        echo "---" > ~/.gem/credentials
+        echo ":rubygems_api_key: ${RUBYGEMS_API_KEY}" >> ~/.gem/credentials
+        chmod 0600 ~/.gem/credentials
+        gem push snakommit-${{ steps.set_version.outputs.version }}.gem
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.set_version.outputs.version }}
+        name: Snakommit v${{ steps.set_version.outputs.version }}
+        draft: false
+        prerelease: false
+        files: snakommit-${{ steps.set_version.outputs.version }}.gem
+        body_path: ${{ github.workspace }}/release_notes.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Prepare release notes
+      run: |
+        echo "# Snakommit v${{ steps.set_version.outputs.version }}" > release_notes.md
+        echo "" >> release_notes.md
+        echo "## Changes in this release:" >> release_notes.md
+        
+        # Extract changes for this version from CHANGELOG.md
+        awk -v version="${{ steps.set_version.outputs.version }}" '
+        BEGIN { printing = 0; found = 0; }
+        /^## \[/ {
+          if (printing) { exit; }
+          if ($0 ~ "\\[" version "\\]") {
+            printing = 1;
+            found = 1;
+            next;
+          }
+        }
+        printing { print; }
+        END { if (!found) { print "No specific changes noted for this version."; } }
+        ' CHANGELOG.md >> release_notes.md 
