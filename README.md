@@ -243,3 +243,10 @@ Snakommit has been optimized to offer the best possible performance, even on lar
 - Command pooling to minimize process creation overhead
 
 These optimizations allow Snakommit to remain fast and responsive even on large repositories with many files.
+
+## Contributing
+
+This project uses GitHub Actions for CI/CD:
+- Automated tests run on all PRs to main
+- Automatic version tagging on merge to main
+- Automatic gem publishing when tagged
