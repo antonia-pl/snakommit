@@ -1,9 +1,58 @@
 require "bundler/gem_tasks"
-require "rspec/core/rake_task"
+require "rake/testtask"
 
-RSpec::Core::RakeTask.new(:spec)
+# Standard test task
+desc "Run tests"
+Rake::TestTask.new(:test) do |t|
+  t.libs << "test"
+  t.libs << "lib"
+  t.test_files = FileList["test/**/*_test.rb"]
+end
 
-require "rubocop/rake_task"
-RuboCop::RakeTask.new
+# Verbose test task 
+desc "Run tests with verbose output"
+Rake::TestTask.new(:test_verbose) do |t|
+  t.libs << "test"
+  t.libs << "lib"
+  t.test_files = FileList["test/**/*_test.rb"]
+  t.verbose = true
+  t.warning = true
+end
 
-task default: %i[spec rubocop] 
+# Performance tests only
+desc "Run only performance tests"
+Rake::TestTask.new(:test_performance) do |t|
+  t.libs << "test"
+  t.libs << "lib"
+  t.test_files = FileList["test/performance_test.rb"]
+  t.verbose = true
+end
+
+# Unit tests only (excluding performance tests)
+desc "Run unit tests (excluding performance tests)"
+Rake::TestTask.new(:test_unit) do |t|
+  t.libs << "test"
+  t.libs << "lib"
+  t.test_files = FileList["test/**/*_test.rb"] - FileList["test/performance_test.rb"]
+end
+
+# Individual component tests
+%w[config git templates hooks].each do |component|
+  desc "Run #{component} tests"
+  Rake::TestTask.new("test_#{component}") do |t|
+    t.libs << "test"
+    t.libs << "lib"
+    t.test_files = FileList["test/#{component}_test.rb"]
+  end
+end
+
+begin
+  require "rubocop/rake_task"
+  RuboCop::RakeTask.new
+  task default: %i[test rubocop]
+rescue LoadError
+  task default: %i[test]
+end
+
+desc "Run all tests and checks"
+task :ci => [:test_unit, :test_performance, :rubocop] 

@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# This is an alias for snakommit
+require 'snakommit'
+
+# Just forward all arguments to the snakommit CLI
+cli = Snakommit::CLI.new
+cli.run(ARGV) 

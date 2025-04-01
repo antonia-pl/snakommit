@@ -32,7 +32,8 @@ go.work
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -80,3 +81,24 @@ Temporary Items
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 
+*.gem
+
+# Gem builds
+*.gem
+
+# RubyGems credentials
+/.rubygems
+/.gem/credentials
+
+# Test coverage
+/coverage/
+/.nyc_output/
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Ruby debugger
+.byebug_history

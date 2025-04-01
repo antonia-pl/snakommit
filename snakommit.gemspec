@@ -22,7 +22,7 @@ Gem::Specification.new do |spec|
     `git ls-files -z`.split("\x0").reject { |f| f.match(%r{^(test|spec|features)/}) }
   end
   spec.bindir        = "bin"
-  spec.executables   = ["snakommit"]
+  spec.executables   = ["snakommit", "sk"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "tty-prompt", "~> 0.23.1"
@@ -34,4 +34,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.10"
   spec.add_development_dependency "rubocop", "~> 1.25.1"
+  spec.add_development_dependency "parallel", "~> 1.21"
 end 
