@@ -43,7 +43,8 @@ jobs:
           git config --local user.name "GitHub Actions"
           git fetch --all
           git checkout -b test origin/test
-          git merge --no-ff origin/dev -m "Auto-merge dev to test"
+          git reset --hard origin/test
+          git merge --no-ff -X theirs origin/dev -m "Auto-merge dev to test"
           git push origin test
 
   test-test:
