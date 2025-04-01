@@ -2,13 +2,85 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev, test]
   pull_request:
     branches: [main]
   create:
     tags: ['*']
 
 jobs:
+  test-dev:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+      
+      - name: Install dependencies
+        run: bundle install
+      
+      - name: Run tests
+        run: bundle exec rake test
+
+  merge-to-test:
+    needs: test-dev
+    if: github.ref == 'refs/heads/dev' && success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Merge dev to test
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git checkout test
+          git merge --no-ff origin/dev -m "Auto-merge dev to test"
+          git push origin test
+
+  test-test:
+    if: github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+      
+      - name: Install dependencies
+        run: bundle install
+      
+      - name: Run tests
+        run: bundle exec rake test
+
+  merge-to-main:
+    needs: test-test
+    if: github.ref == 'refs/heads/test' && success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Merge test to main
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git checkout main
+          git merge --no-ff origin/test -m "Auto-merge test to main"
+          git push origin main
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +103,7 @@ jobs:
         id: gemspec_version
         run: |
           VERSION=$(ruby -e "require './snakommit.gemspec'; puts Gem::Specification::load('./snakommit.gemspec').version")
-          echo "::set-output name=version::v$VERSION"
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
       
       - name: Create and push tag
         if: github.ref == 'refs/heads/main' && success()
@@ -55,4 +127,3 @@ jobs:
           chmod 0600 $HOME/.gem/credentials
           printf -- "---\n:rubygems_api_key: ${RUBYGEMS_API_KEY}\n" > $HOME/.gem/credentials
           gem push *.gem
-
