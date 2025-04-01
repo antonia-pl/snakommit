@@ -41,7 +41,7 @@ jobs:
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git checkout test
+          git checkout refs/heads/test
           git merge --no-ff origin/dev -m "Auto-merge dev to test"
           git push origin test
 
