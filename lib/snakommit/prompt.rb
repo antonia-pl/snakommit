@@ -30,113 +30,116 @@ module Snakommit
     def commit_flow
       return { error: 'Not in a Git repository' } unless Git.in_repo?
 
-      puts @pastel.cyan(BANNER)
-      puts "=" * BANNER.length
-      
-      # Get the status of the repository with performance monitoring
-      repo_status = @monitor.measure(:repository_status) do
-        {
-          unstaged: @git.unstaged_files,
-          untracked: @git.untracked_files,
-          staged: @git.staged_files
-        }
-      end
-      
-      unstaged = repo_status[:unstaged]
-      untracked = repo_status[:untracked]
-      staged = repo_status[:staged]
-      
-      # Check if there are any changes to work with
-      if unstaged.empty? && untracked.empty? && staged.empty?
-        return { error: 'No changes detected in the repository' }
-      end
-      
-      # Show file status
-      puts "\nRepository status:"
-      puts "- #{staged.length} file(s) staged for commit"
-      puts "- #{unstaged.length} file(s) modified but not staged"
-      puts "- #{untracked.length} untracked file(s)"
-      
-      # Report performance if debug is enabled
-      if ENV['SNAKOMMIT_DEBUG']
-        puts "\nPerformance report:"
-        @monitor.report.each { |line| puts "  #{line}" }
-      end
-      
-      # Check for saved selections from a previous run
-      saved_selections = @git.get_saved_selections
-      if saved_selections && !saved_selections.empty?
-        puts "\nFound selections from a previous session."
-        if @tty_prompt.yes?("Would you like to use your previous file selections?", default: true)
-          # Stage the previously selected files
-          stage_files(@git, saved_selections)
+      loop do
+        puts @pastel.cyan(BANNER)
+        puts "=" * BANNER.length
+        
+        # Get repository status
+        repo_status = @monitor.measure(:repository_status) do
+          { unstaged: @git.unstaged_files, untracked: @git.untracked_files, staged: @git.staged_files }
+        end
+        
+        unstaged, untracked, staged = repo_status.values_at(:unstaged, :untracked, :staged)
+        
+        # Exit if no changes detected
+        if unstaged.empty? && untracked.empty? && staged.empty?
+          return { error: 'No changes detected in the repository' }
+        end
+        
+        # Show file status
+        puts "\nRepository status:"
+        puts "- #{staged.length} file(s) staged for commit"
+        puts "- #{unstaged.length} file(s) modified but not staged"
+        puts "- #{untracked.length} untracked file(s)"
+        
+        if ENV['SNAKOMMIT_DEBUG']
+          puts "\nPerformance report:"
+          @monitor.report.each { |line| puts "  #{line}" }
+        end
+        
+        # Handle saved selections
+        saved_selections = @git.get_saved_selections
+        if saved_selections&.any?
+          puts "\nFound selections from a previous session."
+          if @tty_prompt.yes?("Would you like to use your previous file selections?", default: true)
+            stage_files(@git, saved_selections)
+          else
+            @git.clear_saved_selections
+            select_files(@git)
+          end
         else
-          # If user doesn't want to use previous selections, clear them
-          @git.clear_saved_selections
-          # Always show file selection to user
           select_files(@git)
         end
-      else
-        # Always show file selection to user
-        select_files(@git)
-      end
-      
-      # Re-check staged files after selection
-      current_staged = @git.staged_files
-      
-      # After file selection, check if we have staged files
-      if current_staged.empty?
-        return { error: 'No changes staged for commit. Please select files to commit.' }
-      end
+        
+        # Check if any files are staged
+        current_staged = @git.staged_files
+        if current_staged.empty?
+          puts "\n#{@pastel.red('Error:')} No changes staged for commit. Please select files to commit."
+          next if @tty_prompt.yes?("Do you want to select files again?", default: true)
+          return { error: 'No changes staged for commit. Please select files to commit.' }
+        end
 
-      # Divider
-      puts "\n" + "-" * 40
-      
-      # Now get the commit info
-      commit_info = @monitor.measure(:get_commit_info) do
-        get_commit_info
-      end
-      return commit_info if commit_info[:error]
+        puts "\n" + "-" * 40
+        
+        # Get commit info
+        commit_info = @monitor.measure(:get_commit_info) { get_commit_info }
+        
+        if commit_info[:error]
+          if commit_info[:error] == 'Commit aborted'
+            current_staged = @git.staged_files
+            if current_staged.any?
+              puts "\nThere are still #{current_staged.length} file(s) staged."
+              
+              if @tty_prompt.yes?("Do you want to continue with these staged files?", default: true)
+                next
+              elsif @tty_prompt.yes?("Do you want to unstage all files?", default: false)
+                unstage_files(@git, current_staged)
+                puts "All files have been unstaged."
+                next
+              else
+                return commit_info
+              end
+            else
+              next if @tty_prompt.yes?("Do you want to start over?", default: true)
+              return commit_info
+            end
+          else
+            return commit_info
+          end
+        end
 
-      # Format the commit message
-      message = format_commit_message(commit_info)
-      
-      # Show which files will be committed
-      puts "\nFiles to be committed:"
-      staged_for_commit = @git.staged_files
-      staged_for_commit.each do |file|
-        puts "- #{file}"
+        # Format and preview commit message
+        message = format_commit_message(commit_info)
+        
+        puts "\nFiles to be committed:"
+        @git.staged_files.each { |file| puts "- #{file}" }
+        
+        puts "\nCommit message preview:"
+        puts "-" * 40
+        puts message
+        puts "-" * 40
+        
+        unless @tty_prompt.yes?('Do you want to proceed with this commit?', default: true)
+          next if @tty_prompt.yes?("Do you want to start over?", default: true)
+          return { error: 'Commit aborted by user' }
+        end
+        
+        # Perform commit
+        spinner = TTY::Spinner.new("[:spinner] Committing changes... ", format: :dots)
+        spinner.auto_spin
+        
+        @monitor.measure(:git_commit) { @git.commit(message) }
+        
+        spinner.success("Changes committed successfully!")
+        puts "\n✓ Successfully committed: #{message.split("\n").first}"
+        
+        if ENV['SNAKOMMIT_DEBUG']
+          puts "\nFinal performance report:"
+          @monitor.report.each { |line| puts "  #{line}" }
+        end
+        
+        return { success: true, message: message }
       end
-      
-      # Preview the commit message
-      puts "\nCommit message preview:"
-      puts "-" * 40
-      puts message
-      puts "-" * 40
-      
-      # Confirm the commit
-      return { error: 'Commit aborted by user' } unless @tty_prompt.yes?('Do you want to proceed with this commit?', default: true)
-      
-      # Commit the changes
-      spinner = TTY::Spinner.new("[:spinner] Committing changes... ", format: :dots)
-      spinner.auto_spin
-      
-      @monitor.measure(:git_commit) do
-        @git.commit(message)
-      end
-      
-      spinner.success("Changes committed successfully!")
-      
-      # Final success message
-      puts "\n✓ Successfully committed: #{message.split("\n").first}"
-      
-      # Show performance stats in debug mode
-      if ENV['SNAKOMMIT_DEBUG']
-        puts "\nFinal performance report:"
-        @monitor.report.each { |line| puts "  #{line}" }
-      end
-      
-      { success: true, message: message }
     rescue Git::GitError => e
       puts "\nError: #{e.message}"
       { error: "Git error: #{e.message}" }
@@ -150,91 +153,70 @@ module Snakommit
     # Select files to add
     def select_files(git)
       begin
-        # Get file lists with performance monitoring
         repo_status = @monitor.measure(:get_files_for_selection) do
-          {
-            unstaged: git.unstaged_files,
-            untracked: git.untracked_files,
-            staged: git.staged_files
-          }
+          { unstaged: git.unstaged_files, untracked: git.untracked_files, staged: git.staged_files }
         end
         
-        unstaged = repo_status[:unstaged]
-        untracked = repo_status[:untracked]
-        staged = repo_status[:staged]
-        
-        # Combine all files that could be staged
+        unstaged, untracked, staged = repo_status.values_at(:unstaged, :untracked, :staged)
         all_stageable_files = unstaged + untracked
         
-        # If there are no files to stage or unstage, return early
+        # No files to work with
         if all_stageable_files.empty? && staged.empty?
           puts "No changes detected in the repository."
           return
         end
         
-        # If we only have staged files but nothing new to stage
-        if all_stageable_files.empty? && !staged.empty?
+        # Only staged files present
+        if all_stageable_files.empty? && staged.any?
           puts "\nCurrently staged files:"
           staged.each { |file| puts "- #{file}" }
           
-          # Ask if user wants to unstage any files
-          if @tty_prompt.yes?("Do you want to unstage any files?", default: false)
-            unstage_files(git, staged)
-          end
+          unstage_files(git, staged) if @tty_prompt.yes?("Do you want to unstage any files?", default: false)
           return
         end
         
-        # First show the user what's currently staged
+        # Show currently staged files
         unless staged.empty?
           puts "\nCurrently staged files:"
           staged.each { |file| puts "- #{file}" }
         end
         
-        # Create options for the file selection menu
+        # Build options for file selection
         options = []
+        options << { name: "[ ALL FILES ]", value: :all_files } if all_stageable_files.any?
         
-        # Add "ALL FILES" option at the top if we have unstaged or untracked files
-        if !all_stageable_files.empty?
-          options << { name: "[ ALL FILES ]", value: :all_files }
-        end
-        
-        # Add modified files with index numbers
         unstaged.each_with_index do |file, idx|
           options << { name: "#{idx+1}. Modified: #{file}", value: file }
         end
         
-        # Add untracked files with continuing index numbers
         untracked.each_with_index do |file, idx|
           options << { name: "#{unstaged.length + idx + 1}. Untracked: #{file}", value: file }
         end
         
-        # Skip if no options
         if options.empty?
           puts "No files available to stage."
           return
         end
         
-        # Prompt user to select files
+        # Get user selections
         puts "\nSelect files to stage for commit:"
         selected = @tty_prompt.multi_select("Choose files (use space to select, enter to confirm):", options, per_page: 15, echo: true)
         
-        # Check if anything was selected
+        # Handle no selection
         if selected.empty?
           puts "No files selected for staging."
           
-          # If we already have staged files, ask if user wants to continue with those
           unless staged.empty?
             puts "You already have #{staged.length} file(s) staged."
-            return unless @tty_prompt.yes?("Do you want to select files again?", default: true)
-            return select_files(git)  # Recursive call to try again
+            return select_files(git) if @tty_prompt.yes?("Do you want to select files again?", default: true)
           end
           
           return
         end
         
+        # Process selection
         puts "\nSelected files to stage:"
         
-        # Handle "ALL FILES" option
         if selected.include?(:all_files)
           selected = all_stageable_files
           puts "- All files (#{selected.length})"
@@ -242,21 +224,18 @@ module Snakommit
           selected.each { |file| puts "- #{file}" }
         end
         
-        # Add a confirmation step
+        # Confirm and stage
         if @tty_prompt.yes?("Proceed with staging these files?", default: true)
-          # Stage the selected files
           stage_files(git, selected)
         else
           puts "Staging canceled by user."
           return
         end
         
-        # After staging, check if the user wants to unstage any files
+        # Offer to unstage
         newly_staged = git.staged_files
-        unless newly_staged.empty?
-          if @tty_prompt.yes?("Do you want to unstage any files?", default: false)
-            unstage_files(git, newly_staged)
-          end
+        if newly_staged.any? && @tty_prompt.yes?("Do you want to unstage any files?", default: false)
+          unstage_files(git, newly_staged)
         end
       rescue TTY::Reader::InputInterrupt
         puts "\nFile selection aborted. Press Ctrl+C again to exit completely or continue."
@@ -305,20 +284,14 @@ module Snakommit
     def unstage_files(git, staged_files)
       return if staged_files.empty?
       
-      # Create options for unstaging
       unstage_options = staged_files.map { |f| { name: f, value: f } }
-      
-      # Unstage heading
       puts "\nUnstage Files:"
-      
-      # Select files to unstage
       to_unstage = @tty_prompt.multi_select("Select files to unstage:", unstage_options, per_page: 15)
       
       unless to_unstage.empty?
         spinner = TTY::Spinner.new("[:spinner] Unstaging files... ", format: :dots)
         spinner.auto_spin
         
-        # Use batch processing for more efficient unstaging
         @monitor.measure(:batch_unstage_files) do
           @batch_processor.process_files(to_unstage) do |batch|
             batch.each { |file| git.reset(file) }
@@ -326,6 +299,21 @@ module Snakommit
         end
         
         spinner.success("Files unstaged")
+        
+        # Check if all files unstaged
+        remaining_staged = git.staged_files
+        if remaining_staged.empty?
+          puts "#{@pastel.yellow('Note:')} All files have been unstaged."
+          
+          # Offer to select new files if available
+          unstaged_files = git.unstaged_files
+          untracked_files = git.untracked_files
+          
+          if (unstaged_files + untracked_files).any? && 
+             @tty_prompt.yes?("Do you want to select new files now?", default: true)
+            select_files(git)
+          end
+        end
       end
     rescue => e
       raise PromptError, "Failed to unstage files: #{e.message}"
@@ -337,12 +325,11 @@ module Snakommit
       
       puts "\nCommit Details:"
       
-      # Select commit type
       info[:type] = select_type
       
-      # Enter scope (optional)
+      # Handle scope selection
       suggested_scopes = @config['scopes']
-      if suggested_scopes && !suggested_scopes.empty?
+      if suggested_scopes&.any?
         scope_options = suggested_scopes.map { |s| { name: s, value: s } }
         scope_options << { name: '[none]', value: nil }
         
@@ -353,18 +340,17 @@ module Snakommit
         info[:scope] = @tty_prompt.ask('Enter the scope of this change (optional, press Enter to skip):')
       end
       
-      # Enter subject
+      # Get subject
       info[:subject] = @tty_prompt.ask('Enter a short description:') do |q|
         q.required true
         q.validate(/^.{1,#{@config['max_subject_length']}}$/, "Subject must be less than #{@config['max_subject_length']} characters")
       end
       
-      # Enter longer description (optional)
+      # Get body text
       puts "Enter a longer description (optional, press Enter to skip):"
       puts "Type your message and press Enter when done. Leave empty to skip."
       
       body_lines = []
-      # Read input until an empty line is entered
       loop do
         line = @tty_prompt.ask("")
         break if line.nil? || line.empty?
@@ -373,17 +359,15 @@ module Snakommit
       
       info[:body] = body_lines
       
-      # Is this a breaking change?
+      # Breaking changes
       info[:breaking] = @tty_prompt.yes?('Is this a breaking change?', default: false)
-      
-      # Breaking change description
       if info[:breaking]
         info[:breaking_description] = @tty_prompt.ask('Enter breaking change description:') do |q|
           q.required true
         end
       end
       
-      # Any issues closed?
+      # Issue references
       if @tty_prompt.yes?('Does this commit close any issues?', default: false)
         info[:issues] = @tty_prompt.ask('Enter issue references (e.g., "fix #123, close #456"):') do |q|
           q.required true
@@ -392,6 +376,19 @@ module Snakommit
       
       info
     rescue Interrupt
+      # Improved interrupt handling
+      puts "\n#{@pastel.yellow('Interruption:')} Commit process interrupted."
+      
+      staged_files = @git.staged_files
+      if staged_files.any?
+        puts "There are currently #{staged_files.length} file(s) staged."
+        
+        if @tty_prompt.yes?("Do you want to unstage these files?", default: false)
+          unstage_files(@git, staged_files)
+          puts "All files have been unstaged."
+        end
+      end
+      
       { error: 'Commit aborted' }
     rescue => e
       { error: "Failed to gather commit information: #{e.message}" }
@@ -399,37 +396,23 @@ module Snakommit
 
     # Format the commit message according to convention
     def format_commit_message(info)
-      begin
-        header = ''
-        
-        # Format the type and scope
-        commit_type = @templates.emoji_enabled? ? @templates.format_commit_type(info[:type]) : info[:type]
-        
-        if info[:scope] && !info[:scope].empty?
-          header = "#{commit_type}(#{info[:scope]}): #{info[:subject]}"
-        else
-          header = "#{commit_type}: #{info[:subject]}"
-        end
-        
-        # Format the body
-        body = info[:body].empty? ? '' : "\n\n#{info[:body].join("\n")}"
-        
-        # Format breaking change
-        breaking = ''
-        if info[:breaking]
-          breaking = "\n\nBREAKING CHANGE: #{info[:breaking_description]}"
-        end
-        
-        # Format issues
-        issues = info[:issues] ? "\n\n#{info[:issues]}" : ''
-        
-        # Return the full commit message
-        message = "#{header}#{body}#{breaking}#{issues}"
-        
-        message
-      rescue => e
-        raise PromptError, "Failed to format commit message: #{e.message}"
-      end
+      # Format header (type, scope, subject)
+      commit_type = @templates.emoji_enabled? ? @templates.format_commit_type(info[:type]) : info[:type]
+      
+      header = if info[:scope] && !info[:scope].empty?
+                "#{commit_type}(#{info[:scope]}): #{info[:subject]}"
+              else
+                "#{commit_type}: #{info[:subject]}"
+              end
+      
+      # Format body and additional sections
+      body = info[:body].empty? ? '' : "\n\n#{info[:body].join("\n")}"
+      breaking = info[:breaking] ? "\n\nBREAKING CHANGE: #{info[:breaking_description]}" : ''
+      issues = info[:issues] ? "\n\n#{info[:issues]}" : ''
+      
+      "#{header}#{body}#{breaking}#{issues}"
+    rescue => e
+      raise PromptError, "Failed to format commit message: #{e.message}"
     end
 
     def select_type
@@ -441,7 +424,6 @@ module Snakommit
         # Format the display name based on emoji settings
         if @templates.emoji_enabled?
           emoji = @templates.get_emoji_for_type(value)
-          # Ensure there's a space between emoji and type
           name = emoji ? "#{emoji} #{value}: #{type['description']}" : "#{value}: #{type['description']}"
         else
           name = "#{value}: #{type['description']}"
