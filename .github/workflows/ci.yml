@@ -2,130 +2,34 @@ name: CI
 
 on:
   push:
-    branches: [main, dev, test]
-  pull_request:
-    branches: [main]
-  create:
-    tags: ['*']
+    branches:
+      - dev
 
 jobs:
-  test-dev:
-    if: github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.0'
-          bundler-cache: true
-      
-      - name: Install dependencies
-        run: bundle install
-      
-      - name: Run tests
-        run: bundle exec rake test
-
   merge-to-test:
-    needs: test-dev
-    if: github.ref == 'refs/heads/dev' && success()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
+      - name: Checkout code
+        uses: actions/checkout@v2
+
       - name: Merge dev to test
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git fetch --all
-          git checkout -b test origin/test
-          git reset --hard origin/test
-          git merge --no-ff -X theirs origin/dev -m "Auto-merge dev to test"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout test
+          git merge dev
           git push origin test
 
-  test-test:
-    if: github.ref == 'refs/heads/test'
+  run-tests:
     runs-on: ubuntu-latest
+    needs: merge-to-test
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Checkout code
+        uses: actions/checkout@v2
         with:
-          ruby-version: '3.0'
-          bundler-cache: true
-      
-      - name: Install dependencies
-        run: bundle install
-      
-      - name: Run tests
-        run: bundle exec rake test
+          ref: test
 
-  merge-to-main:
-    needs: test-test
-    if: github.ref == 'refs/heads/test' && success()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Merge test to main
-        run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git checkout main
-          git merge --no-ff origin/test -m "Auto-merge test to main"
-          git push origin main
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.0'
-          bundler-cache: true
-      
-      - name: Install dependencies
-        run: bundle install
-      
       - name: Run tests
-        run: bundle exec rake test
-      
-      - name: Get version from gemspec
-        if: github.ref == 'refs/heads/main' && success()
-        id: gemspec_version
         run: |
-          VERSION=$(ruby -e "require './snakommit.gemspec'; puts Gem::Specification::load('./snakommit.gemspec').version")
-          echo "version=v$VERSION" >> $GITHUB_OUTPUT
-      
-      - name: Create and push tag
-        if: github.ref == 'refs/heads/main' && success()
-        run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git tag ${{ steps.gemspec_version.outputs.version }}
-          git push origin ${{ steps.gemspec_version.outputs.version }}
-      
-      - name: Build gem
-        if: startsWith(github.ref, 'refs/tags/') && success()
-        run: gem build *.gemspec
-      
-      - name: Publish to RubyGems
-        if: startsWith(github.ref, 'refs/tags/') && success()
-        env:
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-        run: |
-          mkdir -p $HOME/.gem
-          touch $HOME/.gem/credentials
-          chmod 0600 $HOME/.gem/credentials
-          printf -- "---\n:rubygems_api_key: ${RUBYGEMS_API_KEY}\n" > $HOME/.gem/credentials
-          gem push *.gem
+          bundle install
+          rake test
