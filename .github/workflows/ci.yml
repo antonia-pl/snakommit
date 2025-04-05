@@ -40,7 +40,11 @@ jobs:
         with:
           ref: test
 
-      - name: Run tests
+      - name: Debug available rake tasks
         run: |
           bundle install
+          rake -T
+          
+      - name: Run tests
+        run: |
           rake test
