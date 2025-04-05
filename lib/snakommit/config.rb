@@ -21,7 +21,7 @@ module Snakommit
         { 'name' => 'perf', 'description' => 'A code change that improves performance' },
         { 'name' => 'test', 'description' => 'Adding missing tests or correcting existing tests' },
         { 'name' => 'build', 'description' => 'Changes that affect the build system or external dependencies' },
-        { 'name' => 'ci', 'description' => 'Changes to our CI configuration files and scripts' },
+        { 'name' => 'ci/cd', 'description' => 'Changes to our CI/CD configuration files and scripts' },
         { 'name' => 'chore', 'description' => 'Other changes that don\'t modify src or test files' }
       ],
       'scopes' => [],
