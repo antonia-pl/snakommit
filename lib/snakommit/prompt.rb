@@ -140,6 +140,12 @@ module Snakommit
         
         return { success: true, message: message }
       end
+    rescue PromptError => e
+      puts "\n#{@pastel.red('Error:')} #{e.message}"
+      { error: e.message }
+    rescue TTY::Reader::InputInterrupt
+      puts "\nCommit process interrupted by user."
+      { error: 'Commit aborted by user' }
     rescue Git::GitError => e
       puts "\nError: #{e.message}"
       { error: "Git error: #{e.message}" }
@@ -238,7 +244,19 @@ module Snakommit
           unstage_files(git, newly_staged)
         end
       rescue TTY::Reader::InputInterrupt
-        puts "\nFile selection aborted. Press Ctrl+C again to exit completely or continue."
+        puts "\nFile selection interrupted."
+        
+        # Ask the user if they want to continue or abort
+        begin
+          unless @tty_prompt.yes?("Do you want to continue with the commit process?", default: false)
+            puts "Commit process aborted by user."
+            raise PromptError, "Commit aborted by user"
+          end
+        rescue TTY::Reader::InputInterrupt
+          puts "\nCommit process aborted."
+          raise PromptError, "Commit aborted by user"
+        end
+        
         return
       rescue => e
         puts "\nError during file selection: #{e.message}"
@@ -286,37 +304,47 @@ module Snakommit
       
       unstage_options = staged_files.map { |f| { name: f, value: f } }
       puts "\nUnstage Files:"
-      to_unstage = @tty_prompt.multi_select("Select files to unstage:", unstage_options, per_page: 15)
       
-      unless to_unstage.empty?
-        spinner = TTY::Spinner.new("[:spinner] Unstaging files... ", format: :dots)
-        spinner.auto_spin
+      begin
+        to_unstage = @tty_prompt.multi_select("Select files to unstage:", unstage_options, per_page: 15)
         
-        @monitor.measure(:batch_unstage_files) do
-          @batch_processor.process_files(to_unstage) do |batch|
-            batch.each { |file| git.reset(file) }
+        unless to_unstage.empty?
+          spinner = TTY::Spinner.new("[:spinner] Unstaging files... ", format: :dots)
+          spinner.auto_spin
+          
+          @monitor.measure(:batch_unstage_files) do
+            @batch_processor.process_files(to_unstage) do |batch|
+              batch.each { |file| git.reset(file) }
+            end
+          end
+          
+          spinner.success("Files unstaged")
+          
+          # Check if all files unstaged
+          remaining_staged = git.staged_files
+          if remaining_staged.empty?
+            puts "#{@pastel.yellow('Note:')} All files have been unstaged."
+            
+            # Offer to select new files if available
+            unstaged_files = git.unstaged_files
+            untracked_files = git.untracked_files
+            
+            if (unstaged_files + untracked_files).any?
+              begin
+                if @tty_prompt.yes?("Do you want to select new files now?", default: true)
+                  select_files(git)
+                end
+              rescue Interrupt
+                puts "\nFile selection interrupted."
+              end
+            end
           end
         end
-        
-        spinner.success("Files unstaged")
-        
-        # Check if all files unstaged
-        remaining_staged = git.staged_files
-        if remaining_staged.empty?
-          puts "#{@pastel.yellow('Note:')} All files have been unstaged."
-          
-          # Offer to select new files if available
-          unstaged_files = git.unstaged_files
-          untracked_files = git.untracked_files
-          
-          if (unstaged_files + untracked_files).any? && 
-             @tty_prompt.yes?("Do you want to select new files now?", default: true)
-            select_files(git)
-          end
-        end
+      rescue TTY::Reader::InputInterrupt
+        puts "\nUnstaging files aborted."
+      rescue => e
+        raise PromptError, "Failed to unstage files: #{e.message}"
       end
-    rescue => e
-      raise PromptError, "Failed to unstage files: #{e.message}"
     end
 
     # Get commit information
@@ -379,13 +407,19 @@ module Snakommit
       # Improved interrupt handling
       puts "\n#{@pastel.yellow('Interruption:')} Commit process interrupted."
       
+      # Check if there are staged files
       staged_files = @git.staged_files
       if staged_files.any?
         puts "There are currently #{staged_files.length} file(s) staged."
         
-        if @tty_prompt.yes?("Do you want to unstage these files?", default: false)
-          unstage_files(@git, staged_files)
-          puts "All files have been unstaged."
+        # Offer user to unstage files
+        begin
+          if @tty_prompt.yes?("Do you want to unstage these files?", default: false)
+            unstage_files(@git, staged_files)
+            puts "All files have been unstaged."
+          end
+        rescue Interrupt
+          puts "\nInterruption detected. Aborting commit process."
         end
       end
       
