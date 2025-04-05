@@ -102,7 +102,7 @@ module Snakommit
     # Commit with the given message
     def commit(message)
       with_temp_file(message) do |message_file|
-        stdout, stderr, status = Open3.capture3('git', 'commit', '-F', message_file)
+        _, stderr, status = Open3.capture3('git', 'commit', '-F', message_file)
         
         # Clear any saved selections after successful commit
         clear_saved_selections

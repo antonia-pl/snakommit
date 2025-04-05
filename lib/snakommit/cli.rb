@@ -26,16 +26,12 @@ module Snakommit
 
     def run(args)
       command = args.shift || 'commit'
-      
-      # Start monitoring execution time
       trace_start = Time.now
       
-      # Execute the command with performance monitoring
       result = @monitor.measure(:command_execution) do
         execute_command(command, args)
       end
       
-      # Record command execution metrics if in debug mode
       if ENV['SNAKOMMIT_DEBUG']
         trace_end = Time.now
         puts "\nCommand execution completed in #{(trace_end - trace_start).round(3)}s"
@@ -52,28 +48,17 @@ module Snakommit
     
     def execute_command(command, args)
       case command
-      when 'commit'
-        handle_commit
-      when 'version', '-v', '--version'
-        show_version
-      when 'help', '-h', '--help'
-        show_help
-      when 'hooks'
-        handle_hooks(args)
-      when 'templates'
-        handle_templates(args)
-      when 'emoji'
-        handle_emoji_toggle(args)
-      when 'update'
-        check_for_updates(args.include?('--force'))
-      when 'validate-message'
-        validate_commit_message(args.first)
-      when 'prepare-message'
-        prepare_commit_message
-      when 'log-commit'
-        log_commit(args.first)
-      else
-        unknown_command(command)
+      when 'commit'         then handle_commit
+      when 'version', '-v', '--version' then show_version
+      when 'help', '-h', '--help' then show_help
+      when 'hooks'          then handle_hooks(args)
+      when 'templates'      then handle_templates(args)
+      when 'emoji'          then handle_emoji_toggle(args)
+      when 'update'         then check_for_updates(args.include?('--force'))
+      when 'validate-message' then validate_commit_message(args.first)
+      when 'prepare-message'  then prepare_commit_message
+      when 'log-commit'     then log_commit(args.first)
+      else unknown_command(command)
       end
     end
 
@@ -177,9 +162,7 @@ module Snakommit
         puts "#{hook_name}: #{status[hook_name] || 'unknown'}"
       else
         puts "Git hooks status:"
-        status.each do |hook, state|
-          puts "  #{hook}: #{state}"
-        end
+        status.each { |hook, state| puts "  #{hook}: #{state}" }
       end
     end
 
@@ -187,12 +170,9 @@ module Snakommit
       subcommand = args.shift || 'list'
       
       case subcommand
-      when 'list'
-        list_emoji_mappings
-      when 'update'
-        update_emoji_mapping(args)
-      when 'reset'
-        reset_emoji_mappings
+      when 'list'     then list_emoji_mappings
+      when 'update'   then update_emoji_mapping(args)
+      when 'reset'    then reset_emoji_mappings
       else
         puts "Unknown templates subcommand: #{subcommand}"
         show_help
@@ -201,16 +181,14 @@ module Snakommit
     end
 
     def list_emoji_mappings
-      mappings = @templates.list_emoji_mappings
       puts "Emoji mappings for commit types:"
-      mappings.each do |mapping|
+      @templates.list_emoji_mappings.each do |mapping|
         puts "  #{mapping[:type]}: #{mapping[:emoji]}"
       end
     end
 
     def update_emoji_mapping(args)
-      type = args.shift
-      emoji = args.shift
+      type, emoji = args.shift(2)
       
       if type && emoji
         begin
@@ -249,15 +227,13 @@ module Snakommit
 
     def prepare_commit_message
       # This would normally invoke the interactive prompt
-      # For now, just return a simple message for testing
       puts "chore: automated commit message from snakommit"
       exit 0
     end
 
     def log_commit(commit_hash)
       # In the future, this will store commit stats
-      exit 0 if commit_hash
-      exit 1
+      exit commit_hash ? 0 : 1
     end
 
     def check_for_updates(force = false)
@@ -268,16 +244,14 @@ module Snakommit
       
       begin
         # Get the latest version from RubyGems
-        response = nil
-        @monitor.measure(:fetch_rubygems) do
-          response = URI.open("https://rubygems.org/api/v1/gems/snakommit.json").read
+        response = @monitor.measure(:fetch_rubygems) do
+          URI.open("https://rubygems.org/api/v1/gems/snakommit.json").read
         end
         
         data = JSON.parse(response)
         latest_version = data["version"]
         current_version = Snakommit::VERSION
         
-        # Compare versions
         if force || latest_version > current_version
           update_gem(latest_version, current_version)
         else
@@ -289,7 +263,6 @@ module Snakommit
       end
     end
     
-    # Update to the latest gem version
     def update_gem(latest_version, current_version)
       puts "New version available: #{latest_version} (current: #{current_version})"
       
@@ -323,21 +296,17 @@ module Snakommit
 
     # Handle initialization errors in a user-friendly way
     def handle_initialization_error(error)
-      case error
-      when Prompt::PromptError
-        puts "Error initializing prompt: #{error.message}"
-      when Templates::TemplateError
-        puts "Error initializing templates: #{error.message}"
-      when Hooks::HookError
-        puts "Error initializing hooks: #{error.message}"
-      when Config::ConfigError
-        puts "Error loading configuration: #{error.message}"
-      when Git::GitError
-        puts "Git error: #{error.message}"
-      else
-        puts "Initialization error: #{error.message}"
-        puts "Backtrace:\n  #{error.backtrace.join("\n  ")}" if ENV['SNAKOMMIT_DEBUG']
-      end
+      error_msg = case error
+                  when Prompt::PromptError    then "Error initializing prompt: #{error.message}"
+                  when Templates::TemplateError then "Error initializing templates: #{error.message}"
+                  when Hooks::HookError       then "Error initializing hooks: #{error.message}"
+                  when Config::ConfigError    then "Error loading configuration: #{error.message}"
+                  when Git::GitError          then "Git error: #{error.message}"
+                  else "Initialization error: #{error.message}"
+                  end
+      
+      puts error_msg
+      puts "Backtrace:\n  #{error.backtrace.join("\n  ")}" if ENV['SNAKOMMIT_DEBUG']
       
       puts "\nTrying to run snakommit in a non-Git repository? Make sure you're in a valid Git repository."
       puts "For more information, run 'snakommit help'"
@@ -346,23 +315,18 @@ module Snakommit
 
     # Handle runtime errors in a user-friendly way
     def handle_runtime_error(error)
-      case error
-      when Prompt::PromptError
-        puts "Error during prompt: #{error.message}"
-      when Templates::TemplateError
-        puts "Template error: #{error.message}"
-      when Hooks::HookError
-        puts "Hook error: #{error.message}"
-      when Config::ConfigError
-        puts "Configuration error: #{error.message}"
-      when Git::GitError
-        puts "Git error: #{error.message}"
-      when CLIError
-        puts "CLI error: #{error.message}"
-      else
-        puts "Error: #{error.message}"
-        puts "Backtrace:\n  #{error.backtrace.join("\n  ")}" if ENV['SNAKOMMIT_DEBUG']
-      end
+      error_msg = case error
+                  when Prompt::PromptError    then "Error during prompt: #{error.message}"
+                  when Templates::TemplateError then "Template error: #{error.message}"
+                  when Hooks::HookError       then "Hook error: #{error.message}"
+                  when Config::ConfigError    then "Configuration error: #{error.message}"
+                  when Git::GitError          then "Git error: #{error.message}"
+                  when CLIError               then "CLI error: #{error.message}"
+                  else "Error: #{error.message}"
+                  end
+      
+      puts error_msg
+      puts "Backtrace:\n  #{error.backtrace.join("\n  ")}" if ENV['SNAKOMMIT_DEBUG']
       
       puts "\nFor help, run 'snakommit help'"
       exit 1
