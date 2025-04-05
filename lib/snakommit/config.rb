@@ -29,29 +29,21 @@ module Snakommit
       'max_body_line_length' => 72
     }.freeze
 
-    # Initialiser les variables de classe
+    # Class variables for caching
     @config_cache = {}
     @config_last_modified = nil
 
-    # Load configuration from file, creating default if needed
-    # @return [Hash] The configuration hash
-    # @raise [ConfigError] If configuration can't be loaded
     def self.load
       create_default_config unless File.exist?(CONFIG_FILE)
       
-      # Check if config file has been modified since last load
+      # Use cached config if file hasn't been modified
       current_mtime = File.mtime(CONFIG_FILE) rescue nil
-      
-      # Return cached config if it exists and file hasn't been modified
-      if @config_cache && @config_last_modified == current_mtime
-        return @config_cache.dup
-      end
+      return @config_cache.dup if @config_cache && @config_last_modified == current_mtime
       
       # Load and cache the configuration
       @config_cache = YAML.load_file(CONFIG_FILE) || {}
       @config_last_modified = current_mtime
       
-      # Return a copy to prevent unintentional modifications
       @config_cache.dup
     rescue Errno::EACCES, Errno::ENOENT => e
       raise ConfigError, "Could not load configuration: #{e.message}"
@@ -59,50 +51,32 @@ module Snakommit
       raise ConfigError, "Unexpected error loading configuration: #{e.message}"
     end
 
-    # Create the default configuration file
-    # @return [Boolean] True if successful
-    # @raise [ConfigError] If default config can't be created
     def self.create_default_config
-      # Check if directory exists
+      # Ensure config directory exists
       config_dir = File.dirname(CONFIG_FILE)
-      unless Dir.exist?(config_dir)
-        begin
-          FileUtils.mkdir_p(config_dir)
-        rescue Errno::EACCES => e
-          raise ConfigError, "Permission denied creating config directory: #{e.message}"
-        end
-      end
+      FileUtils.mkdir_p(config_dir) unless Dir.exist?(config_dir)
       
-      # Write config file if it doesn't exist
+      # Write default config if file doesn't exist
       unless File.exist?(CONFIG_FILE)
-        begin
-          File.write(CONFIG_FILE, DEFAULT_CONFIG.to_yaml)
-          
-          # Update cache
-          @config_cache = DEFAULT_CONFIG.dup
-          @config_last_modified = File.mtime(CONFIG_FILE) rescue nil
-        rescue Errno::EACCES => e
-          raise ConfigError, "Permission denied creating config file: #{e.message}"
-        rescue => e
-          raise ConfigError, "Unexpected error creating config file: #{e.message}"
-        end
+        File.write(CONFIG_FILE, DEFAULT_CONFIG.to_yaml)
+        
+        # Update cache
+        @config_cache = DEFAULT_CONFIG.dup
+        @config_last_modified = File.mtime(CONFIG_FILE) rescue nil
       end
       
       true
+    rescue Errno::EACCES => e
+      raise ConfigError, "Permission denied: #{e.message}"
+    rescue => e
+      raise ConfigError, "Failed to create config file: #{e.message}"
     end
     
-    # Update configuration values
-    # @param updates [Hash] Configuration values to update
-    # @return [Hash] The updated configuration
-    # @raise [ConfigError] If configuration can't be updated
     def self.update(updates)
-      config = load
-      config.merge!(updates)
+      config = load.merge(updates)
       
-      # Create a backup of the current configuration
+      # Backup and write updated config
       backup_config if File.exist?(CONFIG_FILE)
-      
-      # Write the updated configuration
       File.write(CONFIG_FILE, config.to_yaml)
       
       # Update cache
@@ -114,17 +88,10 @@ module Snakommit
       raise ConfigError, "Failed to update configuration: #{e.message}"
     end
     
-    # Get a specific configuration value
-    # @param key [String] Configuration key
-    # @param default [Object] Default value if key not found
-    # @return [Object] Configuration value or default
     def self.get(key, default = nil)
-      config = load
-      config.fetch(key, default)
+      load.fetch(key, default)
     end
     
-    # Reset configuration to defaults
-    # @return [Hash] The default configuration
     def self.reset
       backup_config if File.exist?(CONFIG_FILE)
       File.write(CONFIG_FILE, DEFAULT_CONFIG.to_yaml)
@@ -140,8 +107,6 @@ module Snakommit
     
     private
     
-    # Backup the current configuration
-    # @return [String] Path to backup file
     def self.backup_config
       backup_file = "#{CONFIG_FILE}.bak"
       FileUtils.cp(CONFIG_FILE, backup_file)
