@@ -22,9 +22,11 @@ jobs:
           # Check if test branch exists, create it if not
           if git ls-remote --heads origin test | grep test; then
             echo "Branch test exists, checking out"
+            rm -rf test
             git checkout test
           else
             echo "Branch test does not exist, creating it"
+            rm -rf test
             git checkout -b test
           fi
           
