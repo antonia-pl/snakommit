@@ -18,7 +18,7 @@ module Snakommit
       'perf' => '⚡️', # zap
       'test' => '✅', # check mark
       'build' => '🔧', # wrench
-      'ci' => '👷', # construction worker
+      'ci/cd' => '👷', # construction worker
       'chore' => '🔨', # hammer
       'revert' => '⏪️', # rewind
     }.freeze
