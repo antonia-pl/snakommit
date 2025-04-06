@@ -6,6 +6,9 @@ on:
     types:
       - completed
 
+permissions:
+  contents: write
+
 jobs:
   merge-to-main:
     runs-on: ubuntu-latest
@@ -29,14 +32,14 @@ jobs:
 
       - name: Merge test into main
         run: |
-          # Checkout ou créer la branche main
+          # Checkout or create main branch
           if git show-ref --quiet refs/remotes/origin/main; then
             git checkout -B main origin/main
           else
             git checkout -b main
           fi
 
-          # Merge test dans main
+          # Merge test into main
           if ! git merge origin/test --no-commit; then
             echo "Merge conflict detected, resolving in favor of test branch changes"
             git checkout --theirs .
@@ -44,11 +47,13 @@ jobs:
           fi
 
           git commit -m "Merge test into main" || echo "No changes to commit"
+          # Check if there are changes to push
+          git diff --quiet origin/main HEAD || git_has_changes=true
 
       - name: Push to origin/main
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          git push origin main
+          git push -f origin main
 
       - name: Create and push new tag
         run: |
