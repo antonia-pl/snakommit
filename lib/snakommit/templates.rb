@@ -18,7 +18,7 @@ module Snakommit
       'perf' => '⚡️', # zap
       'test' => '✅', # check mark
       'build' => '🔧', # wrench
-      'ci' => '👷', # construction worker
+      'ci/cd' => '👷', # construction worker
       'chore' => '🔨', # hammer
       'revert' => '⏪️', # rewind
     }.freeze
@@ -29,8 +29,6 @@ module Snakommit
     def initialize
       ensure_config_directory
       @emoji_formatted_types = {} # Cache for formatted commit types
-      
-      # Initialiser les valeurs par défaut avant de charger la configuration
       @emoji_enabled = false
       @emoji_map = DEFAULT_EMOJI_MAP.dup
       
@@ -123,7 +121,6 @@ module Snakommit
       
       begin
         ensure_config_directory
-        # Écrire le fichier en une seule opération
         File.write(CONFIG_FILE, config.to_yaml)
       rescue => e
         handle_config_error(e, "Failed to save")

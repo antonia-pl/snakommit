@@ -1,0 +1,76 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+jobs:
+  merge-to-main:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # Needed to fetch all history and tags
+          token: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git identity
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Fetch branches
+        run: |
+          git fetch origin test
+          git fetch origin main || echo "Main branch doesn't exist yet"
+
+      - name: Merge test into main
+        run: |
+          # Checkout ou créer la branche main
+          if git show-ref --quiet refs/remotes/origin/main; then
+            git checkout -B main origin/main
+          else
+            git checkout -b main
+          fi
+
+          # Merge test dans main
+          if ! git merge origin/test --no-commit; then
+            echo "Merge conflict detected, resolving in favor of test branch changes"
+            git checkout --theirs .
+            git add .
+          fi
+
+          git commit -m "Merge test into main" || echo "No changes to commit"
+
+      - name: Push to origin/main
+        run: |
+          git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git push origin main
+
+      - name: Create and push new tag
+        run: |
+          # Get latest tag or default to v0.0.0
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Extract version numbers
+          MAJOR=$(echo "$LATEST_TAG" | cut -d. -f1 | sed 's/v//')
+          MINOR=$(echo "$LATEST_TAG" | cut -d. -f2)
+          PATCH=$(echo "$LATEST_TAG" | cut -d. -f3)
+          
+          echo "Current version: $MAJOR.$MINOR.$PATCH"
+
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "Creating new tag: $NEW_TAG"
+
+          # Create tag
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+
+          # Auth and push
+          git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git push origin "$NEW_TAG"
