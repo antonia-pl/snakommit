@@ -16,28 +16,28 @@ jobs:
 
       - name: Merge dev to test
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          
-          # Check if test branch exists, create it if not
-          if git ls-remote --heads origin test | grep test; then
-            echo "Branch test exists, checking out"
-            git checkout test
-          else
-            echo "Branch test does not exist, creating it"
-            git checkout -b test
-          fi
-          
-          # Try to merge, if conflict occurs use strategy to favor dev branch changes
-          if ! git merge dev --no-commit; then
-            echo "Merge conflict detected, resolving in favor of dev branch changes"
-            git checkout --ours .
-            git add .
-          fi
-          
-          # Commit the merge and push
-          git commit -m "Merge dev into test" || echo "No changes to commit"
-          git push origin test
+            git config --global user.name "GitHub Actions"
+            git config --global user.email "actions@github.com"
+            
+            # Check if test branch exists on remote
+            if git ls-remote --exit-code --heads origin test; then
+              echo "Branch test exists, checking out"
+              git fetch origin test
+              git checkout -B test origin/test
+            else
+              echo "Branch test does not exist, creating it"
+              git checkout -b test
+            fi
+        
+            # Merge dev into test
+            if ! git merge origin/dev --no-commit; then
+              echo "Merge conflict detected, resolving in favor of dev branch changes"
+              git checkout --theirs .
+              git add .
+            fi
+        
+            git commit -m "Merge dev into test" || echo "No changes to commit"
+            git push origin test
 
   run-tests:
     runs-on: ubuntu-latest
@@ -53,7 +53,8 @@ jobs:
         with:
           bundler-cache: true
 
-      - name: Run Rake tasks
-        run: |
-          rake -T
-          rake test
+      - name: List available Rake tasks
+        run: rake -T
+
+      - name: Run tests
+        run: rake test
