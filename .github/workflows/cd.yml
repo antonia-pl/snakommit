@@ -6,6 +6,9 @@ on:
     types:
       - completed
 
+permissions:
+  contents: write
+
 jobs:
   merge-to-main:
     runs-on: ubuntu-latest
@@ -44,11 +47,13 @@ jobs:
           fi
 
           git commit -m "Merge test into main" || echo "No changes to commit"
+          # Vérifier s'il y a des modifications à pousser
+          git diff --quiet origin/main HEAD || git_has_changes=true
 
       - name: Push to origin/main
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          git push origin main
+          git push -f origin main
 
       - name: Create and push new tag
         run: |
