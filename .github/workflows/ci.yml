@@ -38,7 +38,6 @@ jobs:
         
             git commit -m "Merge dev into test" || echo "No changes to commit"
             git push origin test
-        
 
   run-tests:
     runs-on: ubuntu-latest
@@ -49,11 +48,13 @@ jobs:
         with:
           ref: test
 
-      - name: Debug available rake tasks
-        run: |
-          bundle install
-          rake -T
-          
+      - name: Set up Ruby (auto-detect from .ruby-version or Gemfile)
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: List available Rake tasks
+        run: rake -T
+
       - name: Run tests
-        run: |
-          rake test
+        run: rake test
