@@ -51,6 +51,7 @@ jobs:
       - name: Set up Ruby (auto-detect from .ruby-version or Gemfile)
         uses: ruby/setup-ruby@v1
         with:
+          ruby-version: '3.2'
           bundler-cache: true
 
       - name: List available Rake tasks
