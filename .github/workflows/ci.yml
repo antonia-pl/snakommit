@@ -42,6 +42,9 @@ jobs:
             fi
         
             git commit -m "Merge dev into test" || echo "No changes to commit"
+            
+            # Use token for authentication when pushing
+            git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
             git push origin test
 
   run-tests:
