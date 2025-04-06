@@ -5,10 +5,6 @@ on:
     branches:
       - dev
 
-permissions:
-  contents: write
-  actions: write
-
 jobs:
   merge-to-test:
     runs-on: ubuntu-latest
@@ -17,7 +13,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-          token: ${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Merge dev to test
         run: |
@@ -42,10 +37,8 @@ jobs:
             fi
         
             git commit -m "Merge dev into test" || echo "No changes to commit"
-            
-            # Use token for authentication when pushing
-            git remote set-url origin https://x-access-token:${{ secrets.WORKFLOW_TOKEN || secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
             git push origin test
+        
 
   run-tests:
     runs-on: ubuntu-latest
@@ -55,6 +48,15 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: test
+
+      - name: Debug available rake tasks
+        run: |
+          bundle install
+          rake -T
+          
+      - name: Run tests
+        run: |
+          rake test
 
       - name: Set up Ruby (auto-detect from .ruby-version or Gemfile)
         uses: ruby/setup-ruby@v1
